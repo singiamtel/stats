@@ -426,7 +426,7 @@ export function parseLeadsReport(report: string) {
   return {total, usage};
 }
 
-function partialParseMovesetReport(report: string) {
+export function partialParseMovesetReport(report: string) {
   const movesets: {
     [name: string]: {
       weight: number;
@@ -439,16 +439,19 @@ function partialParseMovesetReport(report: string) {
   let s = '';
   for (const line of report.split('\n')) {
     i++;
-    if (line.startsWith(' +')) {
+    // Old format (pre-2026-03): section separators start with ' +', new format starts with '+'
+    if (line.trimStart().startsWith('+')) {
       section++;
       i = 0;
       continue;
     }
     if (section % 10 === 1) {
-      species = line.slice(3, line.indexOf('  '));
+      // Old: ' | Name  |', new: '| Name  |' — split on | and trim instead of hardcoded slice(3)
+      species = line.split('|')[1].trim();
     }
     if (section % 10 === 2 && i === 2) {
-      movesets[species] = {weight: Number(line.slice(17, line.indexOf(' ', 17))), outcomes: {}};
+      // Old: ' | Avg. weight: 0.005...', new: '| Avg. weight: 0.005...' — find first number
+      movesets[species] = {weight: Number(line.match(/\d[\d.]*/)?.[0]), outcomes: {}};
     }
     if (section % 10 === 9 && i >= 2) {
       if (i % 2 === 0) {
@@ -466,16 +469,19 @@ function partialParseMovesetReport(report: string) {
   return movesets;
 }
 
-function parseMetagameReport(report: string) {
+export function parseMetagameReport(report: string) {
   const tags: {[tag: string]: number} = {};
   const lines = report.split('\n');
 
   let i = 0;
   for (; i < lines.length; i++) {
-    const d = lines[i].indexOf('.');
+    // Old format (pre-2026-03): lines start with a leading space, e.g. " weatherless....84.96715%"
+    // New format (2026-03+): no leading space, e.g. "weatherless.......88.37742%"
+    const line = lines[i].trimStart();
+    const d = line.indexOf('.');
     if (d < 0) break;
-    const tag = lines[i].slice(1, d);
-    const weight = Number(lines[i].slice(lines[i].search(/\d/), lines[i].lastIndexOf('%'))) / 100;
+    const tag = line.slice(0, d);
+    const weight = Number(line.slice(line.search(/\d/), line.lastIndexOf('%'))) / 100;
     tags[tag] = weight;
   }
   i++;
