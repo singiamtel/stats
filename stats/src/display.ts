@@ -441,16 +441,19 @@ function partialParseMovesetReport(report: string) {
   let s = '';
   for (const line of report.split('\n')) {
     i++;
-    if (line.startsWith(' +')) {
+    // Old format (pre-2026-03): section separators start with ' +', new format starts with '+'
+    if (line.trimStart().startsWith('+')) {
       section++;
       i = 0;
       continue;
     }
     if (section % 10 === 1) {
-      species = line.slice(3, line.indexOf('  '));
+      // Old: ' | Name  |', new: '| Name  |' — split on | and trim instead of hardcoded slice(3)
+      species = line.split('|')[1].trim();
     }
     if (section % 10 === 2 && i === 2) {
-      movesets[species] = {weight: Number(line.slice(17, line.indexOf(' ', 17))), outcomes: {}};
+      // Old: ' | Avg. weight: 0.005...', new: '| Avg. weight: 0.005...' — find first number
+      movesets[species] = {weight: Number(line.match(/\d[\d.]*/)?.[0]), outcomes: {}};
     }
     if (section % 10 === 9 && i >= 2) {
       if (i % 2 === 0) {
