@@ -1,4 +1,6 @@
-import {Display, parseLeadsReport, parseMetagameReport, parseUsageReport} from '../display';
+import {
+  Display, parseLeadsReport, parseMetagameReport, partialParseMovesetReport, parseUsageReport,
+} from '../display';
 
 // Old format: leading space on header lines, Real column has actual values.
 // New format (introduced 2026-03): no leading space, Real column is always 0.
@@ -143,6 +145,82 @@ const mockGen = {
   items: {get: () => undefined},
   moves: {get: () => undefined},
 } as any;
+
+// Moveset report format changed in 2026-03: section separators and data lines lost their
+// leading space. This broke section counting, species name extraction, and weight parsing.
+// https://www.smogon.com/stats/2026-02/moveset/gen9ou-1825.txt (old)
+// https://www.smogon.com/stats/2026-03/moveset/gen9ou-1825.txt (new)
+
+// 9 separators → C&C lands in section 9 (section % 10 === 9)
+const OLD_MOVESET = [
+  ' +---+',
+  ' | Snorlax  |',
+  ' +---+',
+  ' | Raw count: 2  |',
+  ' | Avg. weight: 0.75  |',
+  ' +---+',
+  ' +---+',
+  ' +---+',
+  ' +---+',
+  ' +---+',
+  ' +---+',
+  ' +---+',
+  ' | Checks and Counters |',
+  ' | Tauros 1.0 (1.00±0.00) |',
+  ' |  (50.0% KOed / 25.0% switched out) |',
+].join('\n');
+
+const NEW_MOVESET = [
+  '+---+',
+  '| Snorlax  |',
+  '+---+',
+  '| Raw count: 2  |',
+  '| Avg. weight: 0.75  |',
+  '+---+',
+  '+---+',
+  '+---+',
+  '+---+',
+  '+---+',
+  '+---+',
+  '+---+',
+  '| Checks and Counters |',
+  '| Tauros 1.0 (1.00±0.00) |',
+  '|\t(50.0% KOed / 25.0% switched out)',
+].join('\n');
+
+describe('partialParseMovesetReport', () => {
+  test('old format (leading space) — species, weight, and outcomes parsed correctly', () => {
+    const r = partialParseMovesetReport(OLD_MOVESET);
+    expect(Object.keys(r)).toEqual(['Snorlax']);
+    expect(r['Snorlax'].weight).toBeCloseTo(0.75);
+    expect(r['Snorlax'].outcomes['Tauros']).toMatchObject({
+      koedn: expect.closeTo(0.5),
+      switchedn: expect.closeTo(0.25),
+    });
+  });
+
+  test('new format (no leading space, 2026-03+) — species, weight, and outcomes parsed correctly', () => {
+    const r = partialParseMovesetReport(NEW_MOVESET);
+    expect(Object.keys(r)).toEqual(['Snorlax']);
+    expect(r['Snorlax'].weight).toBeCloseTo(0.75);
+    expect(r['Snorlax'].outcomes['Tauros']).toMatchObject({
+      koedn: expect.closeTo(0.5),
+      switchedn: expect.closeTo(0.25),
+    });
+  });
+
+  test('old and new format produce identical results for equivalent data', () => {
+    const old = partialParseMovesetReport(OLD_MOVESET);
+    const neo = partialParseMovesetReport(NEW_MOVESET);
+    expect(neo).toEqual(old);
+  });
+
+  test('weight >= 1 is parsed correctly (old slice(17) would give wrong result)', () => {
+    const report = OLD_MOVESET.replace('Avg. weight: 0.75', 'Avg. weight: 1.5');
+    const r = partialParseMovesetReport(report);
+    expect(r['Snorlax'].weight).toBeCloseTo(1.5);
+  });
+});
 
 // Metagame report format changed in 2026-03: old format has a leading space on tag lines,
 // new format does not. Both must produce identical keys (no truncated first character).
